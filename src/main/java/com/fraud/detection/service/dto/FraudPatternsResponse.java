@@ -1,7 +1,6 @@
 package com.fraud.detection.service.dto;
 
-import com.fraud.detection.service.model.FraudPattern;
-
+import com.riskplatform.common.entity.FraudPattern;
 import java.util.List;
 
 public class FraudPatternsResponse {

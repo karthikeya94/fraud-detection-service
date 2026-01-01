@@ -1,8 +1,9 @@
 package com.fraud.detection.service.service;
 
-import com.fraud.detection.service.model.*;
-import com.fraud.detection.service.model.enums.FraudType;
-import com.fraud.detection.service.model.enums.ActionType;
+import com.fraud.detection.service.model.CustomerProfile;
+import com.riskplatform.common.entity.Transaction;
+import com.riskplatform.common.entity.DetectionResult;
+
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -18,10 +19,9 @@ public class VelocityFraudDetector {
             throws FraudDetectionException {
         try {
             DetectionResult result = DetectionResult.builder()
-                    .type(FraudType.VELOCITY_FRAUD)
-                    .status("NOT_DETECTED")
+                    .type(com.riskplatform.common.enums.FraudType.VELOCITY_FRAUD)
+                    .status(com.riskplatform.common.enums.AlertStatus.NOT_DETECTED)
                     .confidence(0)
-                    .action(ActionType.ALLOW)
                     .details(new HashMap<>())
                     .build();
 
@@ -48,22 +48,18 @@ public class VelocityFraudDetector {
             boolean condition3 = amountSpikeRatio.compareTo(new BigDecimal("5")) > 0;
 
             if (condition1 || condition2 || condition3) {
-                result.setStatus("DETECTED");
+                result.setStatus(com.riskplatform.common.enums.AlertStatus.DETECTED);
 
                 int confidence = calculateConfidence(txnCount30Min, txnCount24Hours, amountSpikeRatio, customerProfile);
                 result.setConfidence(confidence);
 
                 if (confidence >= 80) {
-                    result.setAction(ActionType.AUTO_BLOCK);
                     result.setReason("High velocity fraud detected");
                 } else if (confidence >= 60) {
-                    result.setAction(ActionType.MANUAL_REVIEW);
                     result.setReason("Medium velocity fraud detected");
                 } else if (confidence >= 40) {
-                    result.setAction(ActionType.MONITOR);
                     result.setReason("Low velocity fraud detected");
                 } else {
-                    result.setAction(ActionType.ALLOW);
                     result.setReason("Minimal velocity fraud detected");
                 }
 

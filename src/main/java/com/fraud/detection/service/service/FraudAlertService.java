@@ -1,9 +1,9 @@
 package com.fraud.detection.service.service;
 
 import com.fraud.detection.service.kafka.FraudDetectionProducer;
-import com.fraud.detection.service.model.FraudAlert;
-import com.fraud.detection.service.model.Resolution;
-import com.fraud.detection.service.model.enums.AlertStatus;
+import com.riskplatform.common.entity.FraudAlert;
+import com.riskplatform.common.entity.Resolution;
+import com.riskplatform.common.enums.AlertStatus;
 import com.fraud.detection.service.repository.FraudAlertRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -136,13 +136,13 @@ public class FraudAlertService {
                     .forEach(alert -> {
                         try {
                             Resolution resolution = Resolution.builder()
-                                    .action("AUTO_ESCALATE")
+                                    .action(com.riskplatform.common.enums.ActionType.AUTO_ESCALATE)
                                     .reason("Not reviewed within time limit")
                                     .resolvedBy("SYSTEM")
                                     .resolvedAt(Instant.now())
                                     .build();
 
-                            confirmFraudAlert(alert.getId(), "SYSTEM", resolution);
+                            confirmFraudAlert(alert.getFraudAlertId(), "SYSTEM", resolution);
                         } catch (FraudDetectionException e) {
                         }
                     });
@@ -159,13 +159,13 @@ public class FraudAlertService {
                     .forEach(alert -> {
                         try {
                             Resolution resolution = Resolution.builder()
-                                    .action("AUTO_RESOLVE")
+                                    .action(com.riskplatform.common.enums.ActionType.AUTO_RESOLVE)
                                     .reason("No activity for extended period")
                                     .resolvedBy("SYSTEM")
                                     .resolvedAt(Instant.now())
                                     .build();
 
-                            resolveFraudAlert(alert.getId(), "SYSTEM", resolution);
+                            resolveFraudAlert(alert.getFraudAlertId(), "SYSTEM", resolution);
                         } catch (FraudDetectionException e) {
                         }
                     });

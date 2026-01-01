@@ -1,8 +1,10 @@
 package com.fraud.detection.service.service;
 
-import com.fraud.detection.service.model.*;
-import com.fraud.detection.service.model.enums.FraudType;
-import com.fraud.detection.service.model.enums.ActionType;
+import com.fraud.detection.service.model.CustomerProfile;
+import com.riskplatform.common.entity.Transaction;
+import com.riskplatform.common.model.DeviceInfo;
+import com.riskplatform.common.entity.DetectionResult;
+
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,10 +27,9 @@ public class BehavioralFraudDetector {
             throws FraudDetectionException {
         try {
             DetectionResult result = DetectionResult.builder()
-                    .type(FraudType.BEHAVIORAL_FRAUD)
-                    .status("NOT_DETECTED")
+                    .type(com.riskplatform.common.enums.FraudType.BEHAVIORAL_FRAUD)
+                    .status(com.riskplatform.common.enums.AlertStatus.NOT_DETECTED)
                     .confidence(0)
-                    .action(ActionType.ALLOW)
                     .details(new HashMap<>())
                     .build();
 
@@ -55,19 +56,15 @@ public class BehavioralFraudDetector {
             result.setConfidence(finalConfidence);
 
             if (finalConfidence > 0) {
-                result.setStatus("DETECTED");
+                result.setStatus(com.riskplatform.common.enums.AlertStatus.DETECTED);
 
                 if (finalConfidence >= 75) {
-                    result.setAction(ActionType.AUTO_BLOCK);
                     result.setReason("High confidence behavioral fraud detected");
                 } else if (finalConfidence >= 50) {
-                    result.setAction(ActionType.MANUAL_REVIEW);
                     result.setReason("Medium confidence behavioral fraud detected");
                 } else if (finalConfidence >= 30) {
-                    result.setAction(ActionType.MONITOR);
                     result.setReason("Low confidence behavioral fraud detected");
                 } else {
-                    result.setAction(ActionType.ALLOW);
                     result.setReason("Minimal behavioral fraud detected");
                 }
             }

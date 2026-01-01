@@ -1,7 +1,7 @@
 package com.fraud.detection.service.service;
 
-import com.fraud.detection.service.model.FraudAlert;
-import com.fraud.detection.service.model.FraudPattern;
+import com.riskplatform.common.entity.FraudAlert;
+import com.riskplatform.common.entity.FraudPattern;
 import com.fraud.detection.service.repository.FraudAlertRepository;
 import com.fraud.detection.service.repository.FraudPatternRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +38,7 @@ public class FraudPatternService {
 
                 Map<String, Long> detectionTypeCounts = customerAlerts.stream()
                         .flatMap(alert -> alert.getDetectionTypes().stream())
-                        .filter(type -> "DETECTED".equals(type.getStatus()))
+                        .filter(type -> "DETECTED".equals(type.getStatus().name()))
                         .collect(Collectors.groupingBy(
                                 type -> type.getType().name(),
                                 Collectors.counting()));

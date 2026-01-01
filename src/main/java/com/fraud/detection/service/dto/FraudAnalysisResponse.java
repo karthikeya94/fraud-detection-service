@@ -1,9 +1,9 @@
 package com.fraud.detection.service.dto;
 
-import com.fraud.detection.service.model.DetectionResult;
-import com.fraud.detection.service.model.FraudFlag;
-import com.fraud.detection.service.model.CustomerRiskContext;
-import com.fraud.detection.service.model.RequiredAction;
+import com.riskplatform.common.entity.DetectionResult;
+import com.riskplatform.common.entity.FraudFlag;
+import com.riskplatform.common.entity.CustomerRiskContext;
+import com.riskplatform.common.entity.RequiredAction;
 
 import java.util.List;
 

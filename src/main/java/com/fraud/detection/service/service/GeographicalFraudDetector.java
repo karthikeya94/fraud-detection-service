@@ -1,8 +1,12 @@
 package com.fraud.detection.service.service;
 
-import com.fraud.detection.service.model.*;
-import com.fraud.detection.service.model.enums.FraudType;
-import com.fraud.detection.service.model.enums.ActionType;
+import com.fraud.detection.service.model.CustomerDevice;
+import com.fraud.detection.service.model.CustomerProfile;
+import com.riskplatform.common.entity.Transaction;
+import com.riskplatform.common.model.DeviceInfo;
+import com.riskplatform.common.model.Location;
+import com.riskplatform.common.entity.DetectionResult;
+
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -24,10 +28,9 @@ public class GeographicalFraudDetector {
             throws FraudDetectionException {
         try {
             DetectionResult result = DetectionResult.builder()
-                    .type(FraudType.GEOGRAPHIC_FRAUD)
-                    .status("NOT_DETECTED")
+                    .type(com.riskplatform.common.enums.FraudType.GEOGRAPHIC_FRAUD)
+                    .status(com.riskplatform.common.enums.AlertStatus.NOT_DETECTED)
                     .confidence(0)
-                    .action(ActionType.ALLOW)
                     .details(new HashMap<>())
                     .build();
 
@@ -35,40 +38,34 @@ public class GeographicalFraudDetector {
                 return result;
             }
 
-            LocationInfo currentLocation = transaction.getLocation();
+            Location currentLocation = transaction.getLocation();
             Map<String, Object> details = result.getDetails();
-
             int impossibleTravelConfidence = checkImpossibleTravel(transaction, customerProfile, details);
             if (impossibleTravelConfidence >= 90) {
-                result.setStatus("DETECTED");
+                result.setStatus(com.riskplatform.common.enums.AlertStatus.DETECTED);
                 result.setConfidence(impossibleTravelConfidence);
-                result.setAction(ActionType.AUTO_BLOCK);
                 result.setReason("Impossible travel detected");
                 return result;
             }
 
             int highRiskCountryConfidence = checkHighRiskCountry(currentLocation, customerProfile, details);
             if (highRiskCountryConfidence >= 70) {
-                result.setStatus("DETECTED");
+                result.setStatus(com.riskplatform.common.enums.AlertStatus.DETECTED);
                 result.setConfidence(highRiskCountryConfidence);
-                result.setAction(ActionType.MANUAL_REVIEW);
                 result.setReason("Transaction from high-risk country");
                 return result;
             }
 
             int deviceIpMismatchConfidence = checkDeviceIpMismatch(transaction, customerProfile, details);
             if (deviceIpMismatchConfidence > 0) {
-                result.setStatus("DETECTED");
+                result.setStatus(com.riskplatform.common.enums.AlertStatus.DETECTED);
                 result.setConfidence(deviceIpMismatchConfidence);
 
                 if (deviceIpMismatchConfidence >= 65) {
-                    result.setAction(ActionType.MANUAL_REVIEW);
                     result.setReason("Device/IP mismatch with high confidence");
                 } else if (deviceIpMismatchConfidence >= 40) {
-                    result.setAction(ActionType.MONITOR);
                     result.setReason("Device/IP mismatch detected");
                 } else {
-                    result.setAction(ActionType.ALLOW);
                     result.setReason("Minor device/IP inconsistency");
                 }
 
@@ -88,14 +85,14 @@ public class GeographicalFraudDetector {
             return 0;
         }
 
-        LocationInfo currentLocation = transaction.getLocation();
+        Location currentLocation = transaction.getLocation();
         Instant currentTime = transaction.getTimestamp();
 
         for (int i = transactionHistory.size() - 1; i >= 0; i--) {
             Transaction prevTransaction = transactionHistory.get(i);
             if (prevTransaction.getLocation() != null && prevTransaction.getLocation().getLatitude() != null
                     && prevTransaction.getLocation().getLongitude() != null) {
-                LocationInfo prevLocation = prevTransaction.getLocation();
+                Location prevLocation = prevTransaction.getLocation();
                 Instant prevTime = prevTransaction.getTimestamp();
 
                 long timeDiffMinutes = ChronoUnit.MINUTES.between(prevTime, currentTime);
@@ -124,7 +121,7 @@ public class GeographicalFraudDetector {
         return 0;
     }
 
-    private int checkHighRiskCountry(LocationInfo currentLocation, CustomerProfile customerProfile,
+    private int checkHighRiskCountry(Location currentLocation, CustomerProfile customerProfile,
             Map<String, Object> details) {
         String currentCountry = currentLocation.getCountry();
         if (currentCountry == null) {
@@ -156,7 +153,7 @@ public class GeographicalFraudDetector {
     private int checkDeviceIpMismatch(Transaction transaction, CustomerProfile customerProfile,
             Map<String, Object> details) {
         DeviceInfo deviceInfo = transaction.getDevice();
-        LocationInfo locationInfo = transaction.getLocation();
+        Location locationInfo = transaction.getLocation();
 
         if (deviceInfo == null || locationInfo == null || locationInfo.getIp() == null) {
             return 0;

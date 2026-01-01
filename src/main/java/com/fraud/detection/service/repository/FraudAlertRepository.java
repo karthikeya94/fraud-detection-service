@@ -1,7 +1,7 @@
 package com.fraud.detection.service.repository;
 
-import com.fraud.detection.service.model.FraudAlert;
-import com.fraud.detection.service.model.enums.AlertStatus;
+import com.riskplatform.common.entity.FraudAlert;
+import com.riskplatform.common.enums.AlertStatus;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 import java.time.Instant;

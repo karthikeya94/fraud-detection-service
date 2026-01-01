@@ -1,9 +1,17 @@
 package com.fraud.detection.service.service;
 
 import com.fraud.detection.service.kafka.FraudDetectionProducer;
-import com.fraud.detection.service.model.*;
-import com.fraud.detection.service.model.enums.AlertStatus;
-import com.fraud.detection.service.model.enums.ActionType;
+import com.fraud.detection.service.model.CustomerProfile;
+import com.fraud.detection.service.model.FraudAnalysisResult;
+import com.riskplatform.common.entity.Transaction;
+import com.riskplatform.common.entity.DetectionResult;
+import com.riskplatform.common.entity.FraudAlert;
+import com.riskplatform.common.entity.FraudFlag;
+import com.riskplatform.common.entity.Resolution;
+import com.riskplatform.common.entity.RequiredAction;
+import com.riskplatform.common.entity.CustomerRiskContext;
+import com.riskplatform.common.enums.AlertStatus;
+import com.riskplatform.common.enums.ActionType;
 import com.fraud.detection.service.repository.CustomerProfileRepository;
 import com.fraud.detection.service.repository.FraudAlertRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +65,7 @@ public class FraudAnalysisService {
 
             ActionType recommendedAction = determineRecommendedAction(detectionResults, overallConfidence);
 
-            List<String> fraudFlags = createFraudFlags(detectionResults);
+            List<FraudFlag> fraudFlags = createFraudFlags(detectionResults);
 
             CustomerRiskContext riskContext = createCustomerRiskContext(customerProfile);
 
@@ -120,23 +128,25 @@ public class FraudAnalysisService {
     }
 
     private ActionType determineRecommendedAction(List<DetectionResult> detectionResults, int overallConfidence) {
-        // Check for auto-block conditions first
+        // Determine action based on confidence levels since common-models
+        // DetectionResult doesn't have action field
+        // Check for auto-block conditions (confidence >= 80)
         for (DetectionResult result : detectionResults) {
-            if (result.getAction() == ActionType.AUTO_BLOCK) {
+            if (result.getConfidence() != null && result.getConfidence() >= 80) {
                 return ActionType.AUTO_BLOCK;
             }
         }
 
-        // Check for manual review
+        // Check for manual review conditions (confidence >= 60)
         for (DetectionResult result : detectionResults) {
-            if (result.getAction() == ActionType.MANUAL_REVIEW) {
+            if (result.getConfidence() != null && result.getConfidence() >= 60) {
                 return ActionType.MANUAL_REVIEW;
             }
         }
 
-        // Check for monitor
+        // Check for monitor conditions (confidence >= 40)
         for (DetectionResult result : detectionResults) {
-            if (result.getAction() == ActionType.MONITOR) {
+            if (result.getConfidence() != null && result.getConfidence() >= 40) {
                 return ActionType.MONITOR;
             }
         }
@@ -150,29 +160,60 @@ public class FraudAnalysisService {
         return ActionType.MONITOR;
     }
 
-    private List<String> createFraudFlags(List<DetectionResult> detectionResults) {
-        List<String> flags = new ArrayList<>();
+    private List<FraudFlag> createFraudFlags(List<DetectionResult> detectionResults) {
+        List<FraudFlag> flags = new ArrayList<>();
 
         for (DetectionResult result : detectionResults) {
             if ("DETECTED".equals(result.getStatus())) {
                 switch (result.getType()) {
                     case VELOCITY_FRAUD:
-                        flags.add("VELOCITY_ANOMALY");
+                        flags.add(FraudFlag.builder()
+                                .flag("VELOCITY_ANOMALY")
+                                .severity(com.riskplatform.common.enums.Severity.MEDIUM)
+                                .description("Unusual transaction velocity detected")
+                                .build());
                         if (result.getConfidence() != null && result.getConfidence() >= 80) {
-                            flags.add("HIGH_VELOCITY");
+                            flags.add(FraudFlag.builder()
+                                    .flag("HIGH_VELOCITY")
+                                    .severity(com.riskplatform.common.enums.Severity.HIGH)
+                                    .description("Very high transaction velocity detected")
+                                    .build());
                         }
                         break;
                     case GEOGRAPHIC_FRAUD:
-                        flags.add("GEOGRAPHIC_ANOMALY");
+                        flags.add(FraudFlag.builder()
+                                .flag("GEOGRAPHIC_ANOMALY")
+                                .severity(com.riskplatform.common.enums.Severity.MEDIUM)
+                                .description("Transaction location is unusual")
+                                .build());
                         if (result.getConfidence() != null && result.getConfidence() >= 90) {
-                            flags.add("IMPOSSIBLE_TRAVEL");
+                            flags.add(FraudFlag.builder()
+                                    .flag("IMPOSSIBLE_TRAVEL")
+                                    .severity(com.riskplatform.common.enums.Severity.CRITICAL)
+                                    .description("Impossible travel speed detected")
+                                    .build());
                         }
                         break;
                     case BEHAVIORAL_FRAUD:
-                        flags.add("BEHAVIORAL_ANOMALY");
+                        flags.add(FraudFlag.builder()
+                                .flag("BEHAVIORAL_ANOMALY")
+                                .severity(com.riskplatform.common.enums.Severity.MEDIUM)
+                                .description("Transaction behavior deviates from pattern")
+                                .build());
                         if (result.getConfidence() != null && result.getConfidence() >= 75) {
-                            flags.add("ACCOUNT_TAKEOVER_SUSPECTED");
+                            flags.add(FraudFlag.builder()
+                                    .flag("ACCOUNT_TAKEOVER_SUSPECTED")
+                                    .severity(com.riskplatform.common.enums.Severity.HIGH)
+                                    .description("Potential account takeover suspected")
+                                    .build());
                         }
+                        break;
+                    case ACCOUNT_TAKEOVER:
+                        flags.add(FraudFlag.builder()
+                                .flag("ACCOUNT_TAKEOVER_DETECTED")
+                                .severity(com.riskplatform.common.enums.Severity.CRITICAL)
+                                .description("Confirmed account takeover activity")
+                                .build());
                         break;
                 }
             }
@@ -193,20 +234,20 @@ public class FraudAnalysisService {
         switch (recommendedAction) {
             case AUTO_BLOCK:
                 return RequiredAction.builder()
-                        .type("ACCOUNT_LOCK")
-                        .channel("ALL")
+                        .type(ActionType.BLOCK_CARD_AND_REFUND)
+                        .channel(com.riskplatform.common.enums.NotificationChannel.SMS)
                         .expirySeconds(0)
                         .build();
             case MANUAL_REVIEW:
                 return RequiredAction.builder()
-                        .type("MANUAL_REVIEW")
-                        .channel("FRAUD_TEAM")
+                        .type(ActionType.MANUAL_REVIEW)
+                        .channel(com.riskplatform.common.enums.NotificationChannel.EMAIL)
                         .expirySeconds(1800) // 30 minutes
                         .build();
             case MONITOR:
                 return RequiredAction.builder()
-                        .type("ENHANCED_MONITORING")
-                        .channel("SYSTEM")
+                        .type(ActionType.MONITOR)
+                        .channel(com.riskplatform.common.enums.NotificationChannel.SMS)
                         .expirySeconds(86400) // 24 hours
                         .build();
             default:
@@ -222,10 +263,11 @@ public class FraudAnalysisService {
                     .reason(null)
                     .resolvedBy(null)
                     .resolvedAt(null)
+                    .notes(null)
                     .build();
 
             FraudAlert fraudAlert = FraudAlert.builder()
-                    .id(analysisResult.getFraudAlertId()) // Use the generated alert ID
+                    .fraudAlertId(analysisResult.getFraudAlertId()) // Use the generated alert ID
                     .transactionId(transaction.getId())
                     .customerId(transaction.getCustomerId())
                     .overallFraudConfidence(analysisResult.getOverallFraudConfidence())

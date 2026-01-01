@@ -1,6 +1,6 @@
 package com.fraud.detection.service.dto;
 
-import com.fraud.detection.service.model.DetectionResult;
+import com.riskplatform.common.entity.DetectionResult;
 
 import java.time.Instant;
 import java.util.List;

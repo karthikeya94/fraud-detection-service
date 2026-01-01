@@ -1,11 +1,11 @@
 package com.fraud.detection.service.controller;
 
 import com.fraud.detection.service.dto.*;
-import com.fraud.detection.service.model.Transaction;
-import com.fraud.detection.service.model.FraudAlert;
+import com.riskplatform.common.entity.FraudAlert;
 import com.fraud.detection.service.model.FraudRule;
-import com.fraud.detection.service.model.Resolution;
-import com.fraud.detection.service.model.enums.AlertStatus;
+import com.riskplatform.common.entity.Resolution;
+import com.riskplatform.common.enums.AlertStatus;
+import com.riskplatform.common.enums.ActionType;
 import com.fraud.detection.service.service.FraudAnalysisService;
 import com.fraud.detection.service.repository.FraudAlertRepository;
 import com.fraud.detection.service.repository.FraudRuleRepository;
@@ -33,19 +33,20 @@ public class FraudDetectionController {
     @PostMapping("/analyze")
     public ResponseEntity<FraudAnalysisResponse> analyzeFraud(@Valid @RequestBody FraudAnalysisRequest request) {
         try {
-            Transaction transaction = Transaction.builder()
-                    .id(request.getTransactionId())
+            com.riskplatform.common.entity.Transaction transaction = com.riskplatform.common.entity.Transaction
+                    .builder()
+                    .transactionId(request.getTransactionId())
                     .customerId(request.getCustomerId())
                     .amount(request.getAmount())
                     .merchant(request.getMerchant())
                     .merchantCategory(request.getMerchantCategory())
                     .timestamp(request.getTimestamp())
-                    .location(com.fraud.detection.service.model.LocationInfo.builder()
+                    .location(com.riskplatform.common.model.Location.builder()
                             .country(request.getLocation().getCountry())
                             .city(request.getLocation().getCity())
                             .ip(request.getLocation().getIp())
                             .build())
-                    .device(com.fraud.detection.service.model.DeviceInfo.builder()
+                    .device(com.riskplatform.common.model.DeviceInfo.builder()
                             .deviceId(request.getDevice().getDeviceId())
                             .type(request.getDevice().getType())
                             .isNewDevice(request.getDevice().getIsNewDevice())
@@ -63,11 +64,7 @@ public class FraudDetectionController {
                             .status(analysisResult.getStatus())
                             .recommendedAction(analysisResult.getRecommendedAction())
                             .detectionTypes(analysisResult.getDetectionTypes())
-                            .fraudFlags(analysisResult.getFraudFlags().stream()
-                                    .map(flag -> com.fraud.detection.service.model.FraudFlag.builder()
-                                            .flag(flag)
-                                            .build())
-                                    .toList())
+                            .fraudFlags(analysisResult.getFraudFlags())
                             .customerRiskContext(analysisResult.getCustomerRiskContext())
                             .requiredAction(analysisResult.getRequiredAction())
                             .build())
@@ -88,7 +85,7 @@ public class FraudDetectionController {
                 FraudAlert fraudAlert = fraudAlertOpt.get();
 
                 FraudAlertResponse response = FraudAlertResponse.builder()
-                        .fraudAlertId(fraudAlert.getId())
+                        .fraudAlertId(fraudAlert.getFraudAlertId())
                         .transactionId(fraudAlert.getTransactionId())
                         .customerId(fraudAlert.getCustomerId())
                         .status(fraudAlert.getStatus().name())
@@ -98,7 +95,10 @@ public class FraudDetectionController {
                         .raisedBy(fraudAlert.getRaisedBy())
                         .assignedTo(fraudAlert.getAssignedTo())
                         .reviewedAt(fraudAlert.getReviewedAt())
-                        .actionTaken(fraudAlert.getResolution() != null ? fraudAlert.getResolution().getAction() : null)
+                        .actionTaken(
+                                fraudAlert.getResolution() != null && fraudAlert.getResolution().getAction() != null
+                                        ? fraudAlert.getResolution().getAction().name()
+                                        : null)
                         .createdAt(fraudAlert.getCreatedAt())
                         .updatedAt(fraudAlert.getUpdatedAt())
                         .build();
@@ -123,7 +123,7 @@ public class FraudDetectionController {
                 FraudAlert fraudAlert = fraudAlertOpt.get();
 
                 Resolution resolution = Resolution.builder()
-                        .action(request.getAction())
+                        .action(ActionType.valueOf(request.getAction()))
                         .reason(request.getReason())
                         .resolvedBy("fraud_officer_001")
                         .resolvedAt(Instant.now())
@@ -136,7 +136,7 @@ public class FraudDetectionController {
                 fraudAlertRepository.save(fraudAlert);
 
                 ResolveFraudAlertResponse response = ResolveFraudAlertResponse.builder()
-                        .fraudAlertId(fraudAlert.getId())
+                        .fraudAlertId(fraudAlert.getFraudAlertId())
                         .status(fraudAlert.getStatus().name())
                         .action(request.getAction())
                         .resolvedAt(resolution.getResolvedAt())
@@ -159,7 +159,7 @@ public class FraudDetectionController {
     public ResponseEntity<FraudPatternsResponse> getFraudPatterns() {
         try {
             Instant since = Instant.now().minusSeconds(24 * 60 * 60);
-            List<com.fraud.detection.service.model.FraudPattern> patterns = fraudAlertRepository
+            List<com.riskplatform.common.entity.FraudPattern> patterns = fraudAlertRepository
                     .findByRaisedAtBetween(since, Instant.now()).stream()
                     .filter(alert -> alert.getOverallFraudConfidence() != null
                             && alert.getOverallFraudConfidence() >= 40)
@@ -177,10 +177,11 @@ public class FraudDetectionController {
         }
     }
 
-    private com.fraud.detection.service.model.FraudPattern convertToFraudPattern(
-            com.fraud.detection.service.model.FraudAlert alert) {
-        return com.fraud.detection.service.model.FraudPattern.builder()
-                .patternId("PATTERN-" + alert.getId().substring(0, Math.min(6, alert.getId().length())))
+    private com.riskplatform.common.entity.FraudPattern convertToFraudPattern(
+            com.riskplatform.common.entity.FraudAlert alert) {
+        return com.riskplatform.common.entity.FraudPattern.builder()
+                .patternId("PATTERN-"
+                        + alert.getFraudAlertId().substring(0, Math.min(6, alert.getFraudAlertId().length())))
                 .name("Suspicious Activity Pattern")
                 .description("Pattern detected from multiple fraud alerts")
                 .type("MULTI_ALERT_PATTERN")
@@ -188,6 +189,7 @@ public class FraudDetectionController {
                 .avgConfidence(alert.getOverallFraudConfidence())
                 .affectedCustomers(1)
                 .trend("STABLE")
+                .lastDetected(alert.getRaisedAt())
                 .build();
     }
 

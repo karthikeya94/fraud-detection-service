@@ -2,7 +2,7 @@ package com.fraud.detection.service.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fraud.detection.service.model.FraudAlert;
+import com.riskplatform.common.entity.FraudAlert;
 import com.fraud.detection.service.service.FraudDetectionException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

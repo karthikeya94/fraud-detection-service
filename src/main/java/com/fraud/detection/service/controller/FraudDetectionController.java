@@ -46,11 +46,7 @@ public class FraudDetectionController {
                             .city(request.getLocation().getCity())
                             .ip(request.getLocation().getIp())
                             .build())
-                    .device(com.riskplatform.common.model.DeviceInfo.builder()
-                            .deviceId(request.getDevice().getDeviceId())
-                            .type(request.getDevice().getType())
-                            .isNewDevice(request.getDevice().getIsNewDevice())
-                            .build())
+                    .device(request.getDevice().getDeviceId())
                     .build();
 
             com.fraud.detection.service.model.FraudAnalysisResult analysisResult = fraudAnalysisService

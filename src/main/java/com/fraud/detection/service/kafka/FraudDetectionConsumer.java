@@ -21,8 +21,8 @@ public class FraudDetectionConsumer {
     @KafkaListener(topics = "transaction-validated", groupId = "fraud-detection-service")
     public void handleTransactionValidated(String message) {
         try {
-            com.riskplatform.common.event.TransactionEvent event = objectMapper.readValue(message,
-                    com.riskplatform.common.event.TransactionEvent.class);
+            com.riskplatform.common.event.TransactionValidatedEvent event = objectMapper.readValue(message,
+                    com.riskplatform.common.event.TransactionValidatedEvent.class);
             com.riskplatform.common.entity.Transaction transaction = mapEventToTransaction(event);
             fraudAnalysisService.analyzeTransaction(transaction);
         } catch (FraudDetectionException e) {
@@ -35,8 +35,8 @@ public class FraudDetectionConsumer {
     @KafkaListener(topics = "risk-score-calculated", groupId = "fraud-detection-service")
     public void handleRiskScoreCalculated(String message) {
         try {
-            com.riskplatform.common.event.TransactionEvent event = objectMapper.readValue(message,
-                    com.riskplatform.common.event.TransactionEvent.class);
+            com.riskplatform.common.event.TransactionValidatedEvent event = objectMapper.readValue(message,
+                    com.riskplatform.common.event.TransactionValidatedEvent.class);
             com.riskplatform.common.entity.Transaction transaction = mapEventToTransaction(event);
             fraudAnalysisService.analyzeTransaction(transaction);
         } catch (FraudDetectionException e) {
@@ -47,7 +47,7 @@ public class FraudDetectionConsumer {
     }
 
     private com.riskplatform.common.entity.Transaction mapEventToTransaction(
-            com.riskplatform.common.event.TransactionEvent event) {
+            com.riskplatform.common.event.TransactionValidatedEvent event) {
         return com.riskplatform.common.entity.Transaction.builder()
                 .transactionId(event.getTransactionId())
                 .customerId(event.getCustomerId())
@@ -58,10 +58,7 @@ public class FraudDetectionConsumer {
                 .timestamp(event.getTimestamp())
                 .channel(event.getChannel())
                 // Map String device to DeviceInfo
-                .device(com.riskplatform.common.model.DeviceInfo.builder()
-                        .type(event.getDevice())
-                        .isNewDevice(true) // Defaulting as event doesn't have details
-                        .build())
+                .device(event.getDevice())
                 .location(event.getLocation())
                 .build();
     }

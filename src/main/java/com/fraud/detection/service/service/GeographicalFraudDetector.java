@@ -152,35 +152,21 @@ public class GeographicalFraudDetector {
 
     private int checkDeviceIpMismatch(Transaction transaction, CustomerProfile customerProfile,
             Map<String, Object> details) {
-        DeviceInfo deviceInfo = transaction.getDevice();
         Location locationInfo = transaction.getLocation();
 
-        if (deviceInfo == null || locationInfo == null || locationInfo.getIp() == null) {
+        if (locationInfo == null || locationInfo.getIp() == null) {
             return 0;
         }
 
         String currentIp = locationInfo.getIp();
-        String deviceId = deviceInfo.getDeviceId();
 
-        if (currentIp == null || deviceId == null) {
+        if (currentIp == null) {
             return 0;
         }
 
         boolean deviceUsedFromLocationBefore = false;
         boolean isNewCustomer = (customerProfile.getTransactionHistory() == null
                 || customerProfile.getTransactionHistory().isEmpty());
-
-        if (customerProfile.getDeviceHistory() != null) {
-            for (CustomerDevice customerDevice : customerProfile.getDeviceHistory()) {
-                if (deviceId.equals(customerDevice.getDeviceId()) && customerDevice.getLocations() != null) {
-                    String locationKey = locationInfo.getCountry() + "-" + locationInfo.getCity();
-                    if (customerDevice.getLocations().contains(locationKey)) {
-                        deviceUsedFromLocationBefore = true;
-                        break;
-                    }
-                }
-            }
-        }
 
         details.put("deviceUsedFromLocationBefore", deviceUsedFromLocationBefore);
         details.put("isNewCustomer", isNewCustomer);

@@ -136,12 +136,7 @@ public class BehavioralFraudDetector {
 
     private int checkAccountTakeoverSignals(Transaction transaction, CustomerProfile customerProfile,
             Map<String, Object> details) {
-        DeviceInfo deviceInfo = transaction.getDevice();
         int takeoverSignals = 0;
-
-        if (deviceInfo != null && Boolean.TRUE.equals(deviceInfo.getIsNewDevice())) {
-            takeoverSignals++;
-        }
 
         String merchant = transaction.getMerchant();
         if (merchant != null && customerProfile.getPreferredMerchants() != null) {

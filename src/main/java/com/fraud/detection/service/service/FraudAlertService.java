@@ -1,20 +1,21 @@
 package com.fraud.detection.service.service;
 
 import com.fraud.detection.service.kafka.FraudDetectionProducer;
+import com.fraud.detection.service.client.MongoServiceClient;
 import com.riskplatform.common.entity.FraudAlert;
 import com.riskplatform.common.entity.Resolution;
 import com.riskplatform.common.enums.AlertStatus;
-import com.fraud.detection.service.repository.FraudAlertRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 
 @Service
 public class FraudAlertService {
 
     @Autowired
-    private FraudAlertRepository fraudAlertRepository;
+    private MongoServiceClient mongoServiceClient;
 
     @Autowired
     private FraudDetectionProducer fraudDetectionProducer;
@@ -22,7 +23,7 @@ public class FraudAlertService {
     public FraudAlert confirmFraudAlert(String alertId, String resolverId, Resolution resolutionDetails)
             throws FraudDetectionException {
         try {
-            Optional<FraudAlert> alertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> alertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (alertOpt.isPresent()) {
                 FraudAlert alert = alertOpt.get();
@@ -32,7 +33,7 @@ public class FraudAlertService {
                     alert.setResolution(resolutionDetails);
                     alert.setUpdatedAt(Instant.now());
 
-                    FraudAlert updatedAlert = fraudAlertRepository.save(alert);
+                    FraudAlert updatedAlert = mongoServiceClient.saveFraudAlert(alert);
 
                     fraudDetectionProducer.sendFraudAlertConfirmed(updatedAlert);
 
@@ -51,7 +52,7 @@ public class FraudAlertService {
     public FraudAlert dismissFraudAlert(String alertId, String resolverId, Resolution resolutionDetails)
             throws FraudDetectionException {
         try {
-            Optional<FraudAlert> alertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> alertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (alertOpt.isPresent()) {
                 FraudAlert alert = alertOpt.get();
@@ -61,7 +62,7 @@ public class FraudAlertService {
                     alert.setResolution(resolutionDetails);
                     alert.setUpdatedAt(Instant.now());
 
-                    FraudAlert updatedAlert = fraudAlertRepository.save(alert);
+                    FraudAlert updatedAlert = mongoServiceClient.saveFraudAlert(alert);
 
                     fraudDetectionProducer.sendFraudAlertDismissed(updatedAlert);
 
@@ -80,7 +81,7 @@ public class FraudAlertService {
     public FraudAlert resolveFraudAlert(String alertId, String resolverId, Resolution resolutionDetails)
             throws FraudDetectionException {
         try {
-            Optional<FraudAlert> alertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> alertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (alertOpt.isPresent()) {
                 FraudAlert alert = alertOpt.get();
@@ -90,7 +91,7 @@ public class FraudAlertService {
                     alert.setResolution(resolutionDetails);
                     alert.setUpdatedAt(Instant.now());
 
-                    return fraudAlertRepository.save(alert);
+                    return mongoServiceClient.saveFraudAlert(alert);
                 } else {
                     throw new IllegalStateException("Cannot resolve fraud alert in status: " + alert.getStatus());
                 }
@@ -104,7 +105,7 @@ public class FraudAlertService {
 
     public FraudAlert assignForReview(String alertId, String assignedTo) throws FraudDetectionException {
         try {
-            Optional<FraudAlert> alertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> alertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (alertOpt.isPresent()) {
                 FraudAlert alert = alertOpt.get();
@@ -115,7 +116,7 @@ public class FraudAlertService {
                     alert.setReviewedAt(Instant.now());
                     alert.setUpdatedAt(Instant.now());
 
-                    return fraudAlertRepository.save(alert);
+                    return mongoServiceClient.saveFraudAlert(alert);
                 } else {
                     throw new IllegalStateException(
                             "Cannot assign fraud alert for review in status: " + alert.getStatus());
@@ -132,8 +133,8 @@ public class FraudAlertService {
         try {
             Instant cutoffTime = Instant.now().minusSeconds(maxReviewTimeSeconds);
 
-            fraudAlertRepository.findByStatusAndReviewedAtBefore(AlertStatus.REVIEW_PENDING, cutoffTime)
-                    .forEach(alert -> {
+            List<FraudAlert> pendingAlerts = mongoServiceClient.findFraudAlertsByStatusAndReviewedAtBefore(AlertStatus.REVIEW_PENDING, cutoffTime);
+            pendingAlerts.forEach(alert -> {
                         try {
                             Resolution resolution = Resolution.builder()
                                     .action(com.riskplatform.common.enums.ActionType.AUTO_ESCALATE)
@@ -155,8 +156,8 @@ public class FraudAlertService {
         try {
             Instant cutoffTime = Instant.now().minusSeconds(maxInactivitySeconds);
 
-            fraudAlertRepository.findByStatusAndUpdatedAtBefore(AlertStatus.CONFIRMED, cutoffTime)
-                    .forEach(alert -> {
+            List<FraudAlert> confirmedAlerts = mongoServiceClient.findFraudAlertsByStatusAndUpdatedAtBefore(AlertStatus.CONFIRMED, cutoffTime);
+            confirmedAlerts.forEach(alert -> {
                         try {
                             Resolution resolution = Resolution.builder()
                                     .action(com.riskplatform.common.enums.ActionType.AUTO_RESOLVE)

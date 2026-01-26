@@ -1,23 +1,25 @@
 package com.fraud.detection.service.service;
 
 import com.fraud.detection.service.model.FraudRule;
-import com.fraud.detection.service.repository.FraudRuleRepository;
+import com.fraud.detection.service.client.MongoServiceClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class FraudRuleService {
 
     @Autowired
-    private FraudRuleRepository fraudRuleRepository;
+    private MongoServiceClient mongoServiceClient;
 
     public List<FraudRule> getActiveRules() throws FraudDetectionException {
         try {
             Instant now = Instant.now();
-            return fraudRuleRepository.findByEnabledTrueAndEffectiveDateBeforeAndExpirationDateAfter(now, now);
+            List<com.riskplatform.common.entity.FraudRule> commonRules = mongoServiceClient.findActiveFraudRules(now, now);
+            return commonRules.stream().map(this::convertToLocalModel).collect(Collectors.toList());
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve active fraud rules: " + e.getMessage(), e);
         }
@@ -25,7 +27,8 @@ public class FraudRuleService {
 
     public List<FraudRule> getRulesByType(String ruleType) throws FraudDetectionException {
         try {
-            return fraudRuleRepository.findByRuleTypeAndEnabledTrue(ruleType);
+            List<com.riskplatform.common.entity.FraudRule> commonRules = mongoServiceClient.findFraudRulesByRuleTypeAndEnabledTrue(ruleType);
+            return commonRules.stream().map(this::convertToLocalModel).collect(Collectors.toList());
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve fraud rules by type: " + e.getMessage(), e);
         }
@@ -33,7 +36,8 @@ public class FraudRuleService {
 
     public List<FraudRule> getRulesByTag(String tag) throws FraudDetectionException {
         try {
-            return fraudRuleRepository.findByTagsContaining(tag);
+            List<com.riskplatform.common.entity.FraudRule> commonRules = mongoServiceClient.findFraudRulesByTagsContaining(tag);
+            return commonRules.stream().map(this::convertToLocalModel).collect(Collectors.toList());
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve fraud rules by tag: " + e.getMessage(), e);
         }
@@ -45,7 +49,9 @@ public class FraudRuleService {
             fraudRule.setUpdatedAt(Instant.now());
             fraudRule.setVersion(1);
 
-            return fraudRuleRepository.save(fraudRule);
+            com.riskplatform.common.entity.FraudRule commonRule = convertToCommonModel(fraudRule);
+            com.riskplatform.common.entity.FraudRule savedCommonRule = mongoServiceClient.saveFraudRule(commonRule);
+            return convertToLocalModel(savedCommonRule);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to add fraud rule: " + e.getMessage(), e);
         }
@@ -53,10 +59,10 @@ public class FraudRuleService {
 
     public FraudRule updateRule(String ruleId, FraudRule updatedRule) throws FraudDetectionException {
         try {
-            Optional<FraudRule> existingRuleOpt = fraudRuleRepository.findById(ruleId);
+            Optional<com.riskplatform.common.entity.FraudRule> existingRuleOpt = mongoServiceClient.findFraudRuleById(ruleId);
 
             if (existingRuleOpt.isPresent()) {
-                FraudRule existingRule = existingRuleOpt.get();
+                com.riskplatform.common.entity.FraudRule existingRule = existingRuleOpt.get();
 
                 existingRule.setRuleName(updatedRule.getRuleName());
                 existingRule.setRuleType(updatedRule.getRuleType());
@@ -72,7 +78,8 @@ public class FraudRuleService {
                 existingRule.setUpdatedAt(Instant.now());
                 existingRule.setVersion(existingRule.getVersion() + 1);
 
-                return fraudRuleRepository.save(existingRule);
+                com.riskplatform.common.entity.FraudRule savedRule = mongoServiceClient.saveFraudRule(existingRule);
+                return convertToLocalModel(savedRule);
             } else {
                 throw new IllegalArgumentException("Fraud rule not found with ID: " + ruleId);
             }
@@ -83,7 +90,15 @@ public class FraudRuleService {
 
     public void deleteRule(String ruleId) throws FraudDetectionException {
         try {
-            fraudRuleRepository.deleteById(ruleId);
+            Optional<com.riskplatform.common.entity.FraudRule> existingRuleOpt = mongoServiceClient.findFraudRuleById(ruleId);
+            if (existingRuleOpt.isPresent()) {
+                com.riskplatform.common.entity.FraudRule existingRule = existingRuleOpt.get();
+                existingRule.setEnabled(false);
+                existingRule.setUpdatedAt(Instant.now());
+                mongoServiceClient.saveFraudRule(existingRule);
+            } else {
+                throw new IllegalArgumentException("Fraud rule not found with ID: " + ruleId);
+            }
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to delete fraud rule: " + e.getMessage(), e);
         }
@@ -91,20 +106,58 @@ public class FraudRuleService {
 
     public FraudRule setRuleEnabled(String ruleId, boolean enabled) throws FraudDetectionException {
         try {
-            Optional<FraudRule> ruleOpt = fraudRuleRepository.findById(ruleId);
-
-            if (ruleOpt.isPresent()) {
-                FraudRule rule = ruleOpt.get();
-                rule.setEnabled(enabled);
-                rule.setUpdatedAt(Instant.now());
-                rule.setVersion(rule.getVersion() + 1);
-
-                return fraudRuleRepository.save(rule);
+            Optional<com.riskplatform.common.entity.FraudRule> existingRuleOpt = mongoServiceClient.findFraudRuleById(ruleId);
+            if (existingRuleOpt.isPresent()) {
+                com.riskplatform.common.entity.FraudRule existingRule = existingRuleOpt.get();
+                existingRule.setEnabled(enabled);
+                existingRule.setUpdatedAt(Instant.now());
+                com.riskplatform.common.entity.FraudRule savedRule = mongoServiceClient.saveFraudRule(existingRule);
+                return convertToLocalModel(savedRule);
             } else {
                 throw new IllegalArgumentException("Fraud rule not found with ID: " + ruleId);
             }
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to set fraud rule enabled status: " + e.getMessage(), e);
         }
+    }
+
+    private FraudRule convertToLocalModel(com.riskplatform.common.entity.FraudRule commonRule) {
+        FraudRule localRule = new FraudRule();
+        localRule.setId(commonRule.getId());
+        localRule.setRuleName(commonRule.getRuleName());
+        localRule.setRuleType(commonRule.getRuleType());
+        localRule.setCondition(commonRule.getCondition());
+        localRule.setAction(commonRule.getAction());
+        localRule.setConfidence(commonRule.getConfidence());
+        localRule.setEnabled(commonRule.getEnabled());
+        localRule.setEffectiveDate(commonRule.getEffectiveDate());
+        localRule.setExpirationDate(commonRule.getExpirationDate());
+        localRule.setPriority(commonRule.getPriority());
+        localRule.setTags(commonRule.getTags());
+        localRule.setDescription(commonRule.getDescription());
+        localRule.setCreatedAt(commonRule.getCreatedAt());
+        localRule.setUpdatedAt(commonRule.getUpdatedAt());
+        localRule.setVersion(commonRule.getVersion());
+        return localRule;
+    }
+
+    private com.riskplatform.common.entity.FraudRule convertToCommonModel(FraudRule localRule) {
+        return com.riskplatform.common.entity.FraudRule.builder()
+                .id(localRule.getId())
+                .ruleName(localRule.getRuleName())
+                .ruleType(localRule.getRuleType())
+                .condition(localRule.getCondition())
+                .action(localRule.getAction())
+                .confidence(localRule.getConfidence())
+                .enabled(localRule.getEnabled())
+                .effectiveDate(localRule.getEffectiveDate())
+                .expirationDate(localRule.getExpirationDate())
+                .priority(localRule.getPriority())
+                .tags(localRule.getTags())
+                .description(localRule.getDescription())
+                .createdAt(localRule.getCreatedAt())
+                .updatedAt(localRule.getUpdatedAt())
+                .version(localRule.getVersion())
+                .build();
     }
 }

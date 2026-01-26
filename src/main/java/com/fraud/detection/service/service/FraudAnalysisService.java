@@ -3,6 +3,7 @@ package com.fraud.detection.service.service;
 import com.fraud.detection.service.kafka.FraudDetectionProducer;
 import com.fraud.detection.service.model.CustomerProfile;
 import com.fraud.detection.service.model.FraudAnalysisResult;
+import com.fraud.detection.service.client.MongoServiceClient;
 import com.riskplatform.common.entity.Transaction;
 import com.riskplatform.common.entity.DetectionResult;
 import com.riskplatform.common.entity.FraudAlert;
@@ -12,8 +13,6 @@ import com.riskplatform.common.entity.RequiredAction;
 import com.riskplatform.common.entity.CustomerRiskContext;
 import com.riskplatform.common.enums.AlertStatus;
 import com.riskplatform.common.enums.ActionType;
-import com.fraud.detection.service.repository.CustomerProfileRepository;
-import com.fraud.detection.service.repository.FraudAlertRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
@@ -34,10 +33,7 @@ public class FraudAnalysisService {
     private BehavioralFraudDetector behavioralFraudDetector;
 
     @Autowired
-    private CustomerProfileRepository customerProfileRepository;
-
-    @Autowired
-    private FraudAlertRepository fraudAlertRepository;
+    private MongoServiceClient mongoServiceClient;
 
     @Autowired
     private FraudDetectionProducer fraudDetectionProducer;
@@ -48,9 +44,19 @@ public class FraudAnalysisService {
                 throw new FraudDetectionException("Customer ID is required");
             }
 
-            CustomerProfile customerProfile = customerProfileRepository
-                    .findByCustomerId(transaction.getCustomerId())
+            com.riskplatform.common.entity.CustomerProfile commonProfile = mongoServiceClient
+                    .findCustomerProfileByCustomerId(transaction.getCustomerId())
                     .orElse(null);
+            
+            // Convert common entity to local model
+            CustomerProfile customerProfile = null;
+            if (commonProfile != null) {
+                customerProfile = new CustomerProfile();
+                customerProfile.setCustomerId(commonProfile.getCustomerId());
+                customerProfile.setFraudHistory(commonProfile.getFraudHistory() != null ? commonProfile.getFraudHistory() : false);
+                customerProfile.setPreviousAlerts(commonProfile.getPreviousAlerts() != null ? commonProfile.getPreviousAlerts() : 0);
+                customerProfile.setAccountAge(commonProfile.getAccountAge());
+            }
 
             DetectionResult velocityResult = velocityFraudDetector.detect(transaction, customerProfile);
             DetectionResult geoResult = geographicalFraudDetector.detect(transaction, customerProfile);
@@ -283,7 +289,7 @@ public class FraudAnalysisService {
                     .updatedAt(Instant.now())
                     .build();
 
-            return fraudAlertRepository.save(fraudAlert);
+            return mongoServiceClient.saveFraudAlert(fraudAlert);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to save fraud alert: " + e.getMessage(), e);
         }

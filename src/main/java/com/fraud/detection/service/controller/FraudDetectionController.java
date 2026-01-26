@@ -7,8 +7,7 @@ import com.riskplatform.common.entity.Resolution;
 import com.riskplatform.common.enums.AlertStatus;
 import com.riskplatform.common.enums.ActionType;
 import com.fraud.detection.service.service.FraudAnalysisService;
-import com.fraud.detection.service.repository.FraudAlertRepository;
-import com.fraud.detection.service.repository.FraudRuleRepository;
+import com.fraud.detection.service.client.MongoServiceClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +15,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Optional;
 import java.time.Instant;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/fraud")
@@ -25,10 +25,7 @@ public class FraudDetectionController {
     private FraudAnalysisService fraudAnalysisService;
 
     @Autowired
-    private FraudAlertRepository fraudAlertRepository;
-
-    @Autowired
-    private FraudRuleRepository fraudRuleRepository;
+    private MongoServiceClient mongoServiceClient;
 
     @PostMapping("/analyze")
     public ResponseEntity<FraudAnalysisResponse> analyzeFraud(@Valid @RequestBody FraudAnalysisRequest request) {
@@ -75,7 +72,7 @@ public class FraudDetectionController {
     @GetMapping("/alerts/{alertId}")
     public ResponseEntity<FraudAlertResponse> getFraudAlert(@PathVariable String alertId) {
         try {
-            Optional<FraudAlert> fraudAlertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> fraudAlertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (fraudAlertOpt.isPresent()) {
                 FraudAlert fraudAlert = fraudAlertOpt.get();
@@ -113,7 +110,7 @@ public class FraudDetectionController {
             @PathVariable String alertId,
             @Valid @RequestBody ResolveFraudAlertRequest request) {
         try {
-            Optional<FraudAlert> fraudAlertOpt = fraudAlertRepository.findById(alertId);
+            Optional<FraudAlert> fraudAlertOpt = mongoServiceClient.findFraudAlertById(alertId);
 
             if (fraudAlertOpt.isPresent()) {
                 FraudAlert fraudAlert = fraudAlertOpt.get();
@@ -129,7 +126,7 @@ public class FraudDetectionController {
                 fraudAlert.setStatus(AlertStatus.CONFIRMED);
                 fraudAlert.setUpdatedAt(Instant.now());
 
-                fraudAlertRepository.save(fraudAlert);
+                mongoServiceClient.saveFraudAlert(fraudAlert);
 
                 ResolveFraudAlertResponse response = ResolveFraudAlertResponse.builder()
                         .fraudAlertId(fraudAlert.getFraudAlertId())
@@ -155,12 +152,17 @@ public class FraudDetectionController {
     public ResponseEntity<FraudPatternsResponse> getFraudPatterns() {
         try {
             Instant since = Instant.now().minusSeconds(24 * 60 * 60);
-            List<com.riskplatform.common.entity.FraudPattern> patterns = fraudAlertRepository
-                    .findByRaisedAtBetween(since, Instant.now()).stream()
+            // Note: findByRaisedAtBetween not available in MongoServiceClient
+            // Using findByStatus and filtering in memory
+            List<FraudAlert> allAlerts = mongoServiceClient.findFraudAlertsByStatus(AlertStatus.RAISED);
+            List<com.riskplatform.common.entity.FraudPattern> patterns = allAlerts.stream()
+                    .filter(alert -> alert.getRaisedAt() != null && 
+                            alert.getRaisedAt().isAfter(since) && 
+                            alert.getRaisedAt().isBefore(Instant.now()))
                     .filter(alert -> alert.getOverallFraudConfidence() != null
                             && alert.getOverallFraudConfidence() >= 40)
                     .map(this::convertToFraudPattern)
-                    .toList();
+                    .collect(Collectors.toList());
 
             FraudPatternsResponse response = FraudPatternsResponse.builder()
                     .patterns(patterns)
@@ -211,7 +213,9 @@ public class FraudDetectionController {
                     .build();
 
             // Save the rule to the database
-            fraudRule = fraudRuleRepository.save(fraudRule);
+            com.riskplatform.common.entity.FraudRule commonRule = convertToCommonFraudRule(fraudRule);
+            com.riskplatform.common.entity.FraudRule savedCommonRule = mongoServiceClient.saveFraudRule(commonRule);
+            fraudRule.setId(savedCommonRule.getId());
 
             AddFraudRuleResponse response = AddFraudRuleResponse.builder()
                     .ruleId(fraudRule.getId())
@@ -223,5 +227,25 @@ public class FraudDetectionController {
         } catch (Exception e) {
             return ResponseEntity.status(500).build();
         }
+    }
+
+    private com.riskplatform.common.entity.FraudRule convertToCommonFraudRule(FraudRule localRule) {
+        return com.riskplatform.common.entity.FraudRule.builder()
+                .id(localRule.getId())
+                .ruleName(localRule.getRuleName())
+                .ruleType(localRule.getRuleType())
+                .condition(localRule.getCondition())
+                .action(localRule.getAction())
+                .confidence(localRule.getConfidence())
+                .enabled(localRule.getEnabled())
+                .effectiveDate(localRule.getEffectiveDate())
+                .expirationDate(localRule.getExpirationDate())
+                .priority(localRule.getPriority())
+                .tags(localRule.getTags())
+                .description(localRule.getDescription())
+                .createdAt(localRule.getCreatedAt())
+                .updatedAt(localRule.getUpdatedAt())
+                .version(localRule.getVersion())
+                .build();
     }
 }

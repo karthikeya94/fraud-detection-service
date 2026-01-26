@@ -2,8 +2,8 @@ package com.fraud.detection.service.service;
 
 import com.riskplatform.common.entity.FraudAlert;
 import com.riskplatform.common.entity.FraudPattern;
-import com.fraud.detection.service.repository.FraudAlertRepository;
-import com.fraud.detection.service.repository.FraudPatternRepository;
+import com.fraud.detection.service.client.MongoServiceClient;
+import com.riskplatform.common.enums.AlertStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
@@ -15,15 +15,13 @@ import java.util.stream.Collectors;
 public class FraudPatternService {
 
     @Autowired
-    private FraudAlertRepository fraudAlertRepository;
-
-    @Autowired
-    private FraudPatternRepository fraudPatternRepository;
+    private MongoServiceClient mongoServiceClient;
 
     public void detectAndUpdatePatterns(long timeWindowSeconds) throws FraudDetectionException {
         try {
             Instant since = Instant.now().minusSeconds(timeWindowSeconds);
-            List<FraudAlert> recentAlerts = fraudAlertRepository.findByRaisedAtBetween(since, Instant.now());
+            Instant now = Instant.now();
+            List<FraudAlert> recentAlerts = mongoServiceClient.findFraudAlertsByRaisedAtBetween(since, now);
 
             Map<String, List<FraudAlert>> alertsByCustomer = recentAlerts.stream()
                     .collect(Collectors.groupingBy(FraudAlert::getCustomerId));
@@ -65,7 +63,7 @@ public class FraudPatternService {
 
     public List<FraudPattern> getPatternsByTrend(String trend) throws FraudDetectionException {
         try {
-            return fraudPatternRepository.findByTrend(trend);
+            return mongoServiceClient.findFraudPatternsByTrend(trend);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve fraud patterns by trend: " + e.getMessage(), e);
         }
@@ -73,7 +71,7 @@ public class FraudPatternService {
 
     public List<FraudPattern> getPatternsBySeverity(String severity) throws FraudDetectionException {
         try {
-            return fraudPatternRepository.findBySeverity(severity);
+            return mongoServiceClient.findFraudPatternsBySeverity(severity);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve fraud patterns by severity: " + e.getMessage(), e);
         }
@@ -81,7 +79,7 @@ public class FraudPatternService {
 
     public List<FraudPattern> getPatternsByDetectionType(String detectionType) throws FraudDetectionException {
         try {
-            return fraudPatternRepository.findByDetectionTypesContaining(detectionType);
+            return mongoServiceClient.findFraudPatternsByDetectionTypesContaining(detectionType);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to retrieve fraud patterns by detection type: " + e.getMessage(),
                     e);
@@ -91,7 +89,7 @@ public class FraudPatternService {
     private void updateOrCreatePattern(String name, String description, String type,
             String severity, int frequency, int affectedCustomers) throws FraudDetectionException {
         try {
-            List<FraudPattern> existingPatterns = fraudPatternRepository.findByName(name);
+            List<FraudPattern> existingPatterns = mongoServiceClient.findFraudPatternsByName(name);
 
             FraudPattern pattern;
             if (!existingPatterns.isEmpty()) {
@@ -125,7 +123,7 @@ public class FraudPatternService {
                         .build();
             }
 
-            fraudPatternRepository.save(pattern);
+            mongoServiceClient.saveFraudPattern(pattern);
         } catch (Exception e) {
             throw new FraudDetectionException("Failed to update or create fraud pattern: " + e.getMessage(), e);
         }
